@@ -1,0 +1,2045 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="12/6/2025 10:00:00 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="ENTERPRISE-ETL-01"
+  DTS:CreatorName="DataEngineering"
+  DTS:DTSID="{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="15.0.2000.180"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="CreditCardTransactionProcessing"
+  DTS:PackageType="5"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{B2C3D4E5-F6A7-8901-BCDE-F23456789012}">
+  
+  <!-- ============================================================== -->
+  <!-- PACKAGE DESCRIPTION                                            -->
+  <!-- Complex ETL Package for Credit Card Transaction Processing     -->
+  <!-- Features: Multi-stage processing, fraud detection, compliance  -->
+  <!-- Author: Enterprise Data Engineering Team                       -->
+  <!-- Version: 2.0.0                                                 -->
+  <!-- ============================================================== -->
+  
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  
+  <!-- ============================================================== -->
+  <!-- PACKAGE ANNOTATIONS                                            -->
+  <!-- ============================================================== -->
+  <DTS:Annotations>
+    <DTS:Annotation
+      DTS:refId="Package.Annotation1"
+      DTS:CreationDate="12/6/2025 10:00:00 AM"
+      DTS:Description="Package Documentation"
+      DTS:Tag="Documentation">
+      <DTS:AnnotationText>
+        CREDIT CARD TRANSACTION PROCESSING PIPELINE
+        ============================================
+        
+        PURPOSE:
+        This package processes daily credit card transactions through multiple
+        stages including validation, fraud detection, compliance checking,
+        and final staging for downstream reporting and analytics.
+        
+        BUSINESS RULES:
+        1. Transactions over $10,000 require enhanced due diligence
+        2. International transactions flagged for OFAC screening
+        3. Merchant category codes validated against approved list
+        4. Duplicate detection within 5-minute window
+        5. PCI-DSS compliant data handling (card numbers masked)
+        
+        DATA FLOW:
+        Source (Staging) → Validation → Fraud Detection → Compliance → 
+        → Data Warehouse → Archive
+        
+        ERROR HANDLING:
+        - All errors logged to ETL_ErrorLog table
+        - Failed records routed to quarantine tables
+        - Email notifications for critical failures
+        
+        SCHEDULE: Daily at 2:00 AM EST
+        SLA: Complete within 4 hours
+        RETENTION: 7 years per regulatory requirement
+      </DTS:AnnotationText>
+    </DTS:Annotation>
+  </DTS:Annotations>
+  
+  <!-- ============================================================== -->
+  <!-- CONNECTION MANAGERS                                            -->
+  <!-- ============================================================== -->
+  <DTS:ConnectionManagers>
+    
+    <!-- Source Database Connection - Staging -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[SRC_CreditCardStaging]"
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{C3D4E5F6-A7B8-9012-CDEF-345678901234}"
+      DTS:ObjectName="SRC_CreditCardStaging">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:ConnectionString="Data Source=SQLPROD-STG-01;Initial Catalog=CreditCardStaging;Provider=SQLNCLI11.1;Integrated Security=SSPI;Application Name=SSIS-CCProcessing;Connect Timeout=30;"/>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    
+    <!-- Target Database Connection - Data Warehouse -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[TGT_DataWarehouse]"
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{D4E5F6A7-B8C9-0123-DEFA-456789012345}"
+      DTS:ObjectName="TGT_DataWarehouse">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:ConnectionString="Data Source=SQLPROD-DW-01;Initial Catalog=CreditCardDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;Application Name=SSIS-CCProcessing;Connect Timeout=30;"/>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    
+    <!-- Fraud Detection Database Connection -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[FRAUD_DetectionDB]"
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{E5F6A7B8-C9D0-1234-EFAB-567890123456}"
+      DTS:ObjectName="FRAUD_DetectionDB">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:ConnectionString="Data Source=SQLPROD-FRAUD-01;Initial Catalog=FraudDetection;Provider=SQLNCLI11.1;Integrated Security=SSPI;Application Name=SSIS-CCProcessing;Connect Timeout=30;"/>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    
+    <!-- Compliance Database Connection -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[COMPLIANCE_DB]"
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{F6A7B8C9-D0E1-2345-FABC-678901234567}"
+      DTS:ObjectName="COMPLIANCE_DB">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:ConnectionString="Data Source=SQLPROD-COMP-01;Initial Catalog=ComplianceDB;Provider=SQLNCLI11.1;Integrated Security=SSPI;Application Name=SSIS-CCProcessing;Connect Timeout=30;"/>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    
+    <!-- Error Log Database Connection -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[LOG_ErrorDatabase]"
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+      DTS:ObjectName="LOG_ErrorDatabase">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:ConnectionString="Data Source=SQLPROD-LOG-01;Initial Catalog=ETLLogging;Provider=SQLNCLI11.1;Integrated Security=SSPI;Application Name=SSIS-CCProcessing;Connect Timeout=30;"/>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    
+    <!-- SMTP Connection for Notifications -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[SMTP_Notifications]"
+      DTS:CreationName="SMTP"
+      DTS:DTSID="{B8C9D0E1-F2A3-4567-BCDE-890123456789}"
+      DTS:ObjectName="SMTP_Notifications">
+      <DTS:ObjectData>
+        <DTS:SmtpConnectionManager
+          DTS:ConnectionString="SmtpServer=smtp.enterprise.bank;UseWindowsAuthentication=True;EnableSsl=True;"/>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    
+    <!-- Flat File Connection - Archive Export -->
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[FF_ArchiveExport]"
+      DTS:CreationName="FLATFILE"
+      DTS:DTSID="{C9D0E1F2-A3B4-5678-CDEF-901234567890}"
+      DTS:ObjectName="FF_ArchiveExport">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:Format="Delimited"
+          DTS:LocaleID="1033"
+          DTS:Unicode="True"
+          DTS:HeaderRowDelimiter="_x000D__x000A_"
+          DTS:ColumnNamesInFirstDataRow="True"
+          DTS:RowDelimiter=""
+          DTS:TextQualifier="_x0022_"
+          DTS:CodePage="65001">
+          <DTS:FlatFileColumns>
+            <DTS:FlatFileColumn DTS:ColumnType="Delimited" DTS:ColumnDelimiter="_x007C_" DTS:MaximumWidth="50" DTS:DataType="129" DTS:TextQualified="True" DTS:ObjectName="TransactionID" DTS:DTSID="{D0E1F2A3-B4C5-6789-DEFA-012345678901}"/>
+            <DTS:FlatFileColumn DTS:ColumnType="Delimited" DTS:ColumnDelimiter="_x007C_" DTS:MaximumWidth="20" DTS:DataType="129" DTS:TextQualified="True" DTS:ObjectName="MaskedCardNumber" DTS:DTSID="{E1F2A3B4-C5D6-7890-EFAB-123456789012}"/>
+            <DTS:FlatFileColumn DTS:ColumnType="Delimited" DTS:ColumnDelimiter="_x007C_" DTS:DataType="6" DTS:ObjectName="TransactionAmount" DTS:DTSID="{F2A3B4C5-D6E7-8901-FABC-234567890123}"/>
+            <DTS:FlatFileColumn DTS:ColumnType="Delimited" DTS:ColumnDelimiter="_x007C_" DTS:MaximumWidth="3" DTS:DataType="129" DTS:TextQualified="True" DTS:ObjectName="CurrencyCode" DTS:DTSID="{A3B4C5D6-E7F8-9012-ABCD-345678901234}"/>
+            <DTS:FlatFileColumn DTS:ColumnType="Delimited" DTS:ColumnDelimiter="_x000D__x000A_" DTS:DataType="135" DTS:ObjectName="TransactionDateTime" DTS:DTSID="{B4C5D6E7-F8A9-0123-BCDE-456789012345}"/>
+          </DTS:FlatFileColumns>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+      <DTS:PropertyExpression DTS:Name="ConnectionString">@[User::ArchiveFilePath] + "\\CC_Archive_" + (DT_STR, 8, 1252) YEAR(@[System::StartTime]) + RIGHT("0" + (DT_STR, 2, 1252) MONTH(@[System::StartTime]), 2) + RIGHT("0" + (DT_STR, 2, 1252) DAY(@[System::StartTime]), 2) + ".txt"</DTS:PropertyExpression>
+    </DTS:ConnectionManager>
+    
+  </DTS:ConnectionManagers>
+  
+  <!-- ============================================================== -->
+  <!-- PACKAGE VARIABLES                                              -->
+  <!-- ============================================================== -->
+  <DTS:Variables>
+    
+    <!-- Execution Control Variables -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{11111111-1111-1111-1111-111111111111}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="PackageExecutionID">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{22222222-2222-2222-2222-222222222222}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="ProcessingDate">
+      <DTS:VariableValue DTS:DataType="7">2025-12-06T00:00:00</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{33333333-3333-3333-3333-333333333333}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="BatchSize">
+      <DTS:VariableValue DTS:DataType="3">50000</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <!-- Threshold Variables -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{44444444-4444-4444-4444-444444444444}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="HighValueThreshold">
+      <DTS:VariableValue DTS:DataType="6">10000.00</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{55555555-5555-5555-5555-555555555555}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="FraudScoreThreshold">
+      <DTS:VariableValue DTS:DataType="6">0.75</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{66666666-6666-6666-6666-666666666666}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="DuplicateWindowMinutes">
+      <DTS:VariableValue DTS:DataType="3">5</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <!-- Counter Variables -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{77777777-7777-7777-7777-777777777777}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="TotalRecordsProcessed">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{88888888-8888-8888-8888-888888888888}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="TotalRecordsFailed">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{99999999-9999-9999-9999-999999999999}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="FraudAlertCount">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="ComplianceViolationCount">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <!-- Path Variables -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ArchiveFilePath">
+      <DTS:VariableValue DTS:DataType="8">\\enterprise-nas\etl\creditcard\archive</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="ErrorFilePath">
+      <DTS:VariableValue DTS:DataType="8">\\enterprise-nas\etl\creditcard\errors</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <!-- Email Variables -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="AlertEmailRecipients">
+      <DTS:VariableValue DTS:DataType="8">dataengineering@enterprise.bank;compliance@enterprise.bank;fraud-alerts@enterprise.bank</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <!-- SQL Query Variables -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE}"
+      DTS:IncludeInDebugDump="2345"
+      DTS:Namespace="User"
+      DTS:ObjectName="SQL_ExtractTransactions">
+      <DTS:VariableValue DTS:DataType="8">
+        SELECT 
+            t.TransactionID,
+            t.CardNumber,
+            t.CardHolderName,
+            t.TransactionAmount,
+            t.CurrencyCode,
+            t.TransactionDateTime,
+            t.MerchantID,
+            t.MerchantName,
+            t.MerchantCategoryCode,
+            t.MerchantCountryCode,
+            t.AuthorizationCode,
+            t.ResponseCode,
+            t.TerminalID,
+            t.CardEntryMode,
+            t.CardPresentIndicator,
+            t.CVVVerificationResult,
+            t.AVSResponseCode,
+            t.CustomerIPAddress,
+            t.DeviceFingerprint,
+            t.ProcessingChannel,
+            t.SettlementDate,
+            t.InterchangeFee,
+            t.NetworkID,
+            c.CustomerID,
+            c.CustomerSegment,
+            c.AccountOpenDate,
+            c.CreditLimit,
+            c.CurrentBalance,
+            c.AvailableCredit,
+            c.RiskRating,
+            c.LastActivityDate
+        FROM dbo.RawTransactions t
+        INNER JOIN dbo.CustomerAccounts c ON t.CardNumber = c.CardNumber
+        WHERE t.ProcessedFlag = 0
+          AND t.TransactionDateTime &gt;= DATEADD(DAY, -1, CAST(? AS DATE))
+          AND t.TransactionDateTime &lt; CAST(? AS DATE)
+        ORDER BY t.TransactionDateTime
+      </DTS:VariableValue>
+    </DTS:Variable>
+    
+    <!-- Status Flags -->
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="EnableFraudDetection">
+      <DTS:VariableValue DTS:DataType="11">-1</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{12121212-1212-1212-1212-121212121212}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="EnableComplianceCheck">
+      <DTS:VariableValue DTS:DataType="11">-1</DTS:VariableValue>
+    </DTS:Variable>
+    
+    <DTS:Variable
+      DTS:CreationName=""
+      DTS:DTSID="{13131313-1313-1313-1313-131313131313}"
+      DTS:IncludeInDebugDump="6789"
+      DTS:Namespace="User"
+      DTS:ObjectName="EnableArchiving">
+      <DTS:VariableValue DTS:DataType="11">-1</DTS:VariableValue>
+    </DTS:Variable>
+    
+  </DTS:Variables>
+  
+  <!-- ============================================================== -->
+  <!-- PACKAGE PARAMETERS                                             -->
+  <!-- ============================================================== -->
+  <DTS:PackageParameters>
+    
+    <DTS:PackageParameter
+      DTS:CreationName=""
+      DTS:DataType="7"
+      DTS:DTSID="{P1111111-1111-1111-1111-111111111111}"
+      DTS:ObjectName="ProcessingDate">
+      <DTS:Property DTS:Name="ParameterValue" DTS:DataType="7">2025-12-06T00:00:00</DTS:Property>
+    </DTS:PackageParameter>
+    
+    <DTS:PackageParameter
+      DTS:CreationName=""
+      DTS:DataType="3"
+      DTS:DTSID="{P2222222-2222-2222-2222-222222222222}"
+      DTS:ObjectName="BatchSize">
+      <DTS:Property DTS:Name="ParameterValue" DTS:DataType="3">50000</DTS:Property>
+    </DTS:PackageParameter>
+    
+    <DTS:PackageParameter
+      DTS:CreationName=""
+      DTS:DataType="8"
+      DTS:DTSID="{P3333333-3333-3333-3333-333333333333}"
+      DTS:ObjectName="Environment"
+      DTS:Sensitive="0">
+      <DTS:Property DTS:Name="ParameterValue" DTS:DataType="8">PROD</DTS:Property>
+    </DTS:PackageParameter>
+    
+    <DTS:PackageParameter
+      DTS:CreationName=""
+      DTS:DataType="11"
+      DTS:DTSID="{P4444444-4444-4444-4444-444444444444}"
+      DTS:ObjectName="EnableNotifications">
+      <DTS:Property DTS:Name="ParameterValue" DTS:DataType="11">-1</DTS:Property>
+    </DTS:PackageParameter>
+    
+  </DTS:PackageParameters>
+  
+  <!-- ============================================================== -->
+  <!-- CONTROL FLOW - MAIN EXECUTABLES                                -->
+  <!-- ============================================================== -->
+  <DTS:Executables>
+    
+    <!-- ========================================= -->
+    <!-- STAGE 1: INITIALIZATION                   -->
+    <!-- ========================================= -->
+    <DTS:Executable
+      DTS:refId="Package\SEQ_Initialization"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Initialize package execution context"
+      DTS:DTSID="{SEQ11111-1111-1111-1111-111111111111}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="SEQ_Initialization">
+      
+      <DTS:Executables>
+        
+        <!-- Log Package Start -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_Initialization\SQL_LogPackageStart"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Log package execution start"
+          DTS:DTSID="{SQL11111-1111-1111-1111-111111111111}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_LogPackageStart"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+              SQLTask:SqlStatementSource="
+                INSERT INTO dbo.ETL_PackageExecution (
+                    PackageName, 
+                    ExecutionStartTime, 
+                    Status, 
+                    Environment,
+                    ProcessingDate,
+                    ServerName,
+                    UserName
+                )
+                VALUES (
+                    'CreditCardTransactionProcessing',
+                    GETDATE(),
+                    'Running',
+                    ?,
+                    ?,
+                    @@SERVERNAME,
+                    SYSTEM_USER
+                );
+                SELECT SCOPE_IDENTITY() AS ExecutionID;"
+              SQLTask:ResultSetType="ResultSetType_SingleRow"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="$Package::Environment"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="50"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+              <SQLTask:ResultBinding
+                SQLTask:ResultName="ExecutionID"
+                SQLTask:DtsVariableName="User::PackageExecutionID"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Validate Connections -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_Initialization\SQL_ValidateConnections"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Validate all database connections are accessible"
+          DTS:DTSID="{SQL22222-2222-2222-2222-222222222222}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_ValidateConnections"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{C3D4E5F6-A7B8-9012-CDEF-345678901234}"
+              SQLTask:SqlStatementSource="SELECT 1 AS ConnectionValid"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"/>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Get Processing Statistics -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_Initialization\SQL_GetProcessingStats"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Get count of transactions to process"
+          DTS:DTSID="{SQL33333-3333-3333-3333-333333333333}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_GetProcessingStats"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{C3D4E5F6-A7B8-9012-CDEF-345678901234}"
+              SQLTask:SqlStatementSource="
+                SELECT COUNT(*) AS PendingCount
+                FROM dbo.RawTransactions 
+                WHERE ProcessedFlag = 0
+                  AND TransactionDateTime &gt;= DATEADD(DAY, -1, CAST(? AS DATE))
+                  AND TransactionDateTime &lt; CAST(? AS DATE)"
+              SQLTask:ResultSetType="ResultSetType_SingleRow"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+      </DTS:Executables>
+      
+      <!-- Precedence Constraints within Initialization -->
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_Initialization.PrecedenceConstraints[Constraint1]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC111111-1111-1111-1111-111111111111}"
+          DTS:From="Package\SEQ_Initialization\SQL_LogPackageStart"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint1"
+          DTS:To="Package\SEQ_Initialization\SQL_ValidateConnections"
+          DTS:Value="0"/>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_Initialization.PrecedenceConstraints[Constraint2]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC222222-2222-2222-2222-222222222222}"
+          DTS:From="Package\SEQ_Initialization\SQL_ValidateConnections"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="Constraint2"
+          DTS:To="Package\SEQ_Initialization\SQL_GetProcessingStats"
+          DTS:Value="0"/>
+      </DTS:PrecedenceConstraints>
+      
+    </DTS:Executable>
+    
+    <!-- ========================================= -->
+    <!-- STAGE 2: DATA EXTRACTION AND VALIDATION  -->
+    <!-- ========================================= -->
+    <DTS:Executable
+      DTS:refId="Package\DFT_ExtractAndValidate"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Extract transactions and perform initial validation"
+      DTS:DTSID="{DFT11111-1111-1111-1111-111111111111}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="DFT_ExtractAndValidate"
+      DTS:TaskContact="Performs high-performance data extraction, transformation, and loading;Microsoft Corporation;Microsoft SQL Server; All Rights Reserved;http://www.microsoft.com/sql/support/default.asp">
+      
+      <DTS:ObjectData>
+        <pipeline version="1" id="1" name="Extract and Validate">
+          
+          <!-- =========================== -->
+          <!-- DATA FLOW COMPONENTS        -->
+          <!-- =========================== -->
+          <components>
+            
+            <!-- Source: Raw Transactions -->
+            <component refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions"
+              componentClassID="Microsoft.OLEDBSource"
+              contactInfo="OLE DB Source;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;7"
+              description="Extracts raw transaction data from staging"
+              name="OLE_SRC_RawTransactions"
+              usesDispositions="true"
+              version="7">
+              <properties>
+                <property name="CommandTimeout">0</property>
+                <property name="OpenRowset"/>
+                <property name="SqlCommand" dataType="System.String">
+                  SELECT 
+                      t.TransactionID,
+                      t.CardNumber,
+                      t.CardHolderName,
+                      t.TransactionAmount,
+                      t.CurrencyCode,
+                      t.TransactionDateTime,
+                      t.MerchantID,
+                      t.MerchantName,
+                      t.MerchantCategoryCode,
+                      t.MerchantCountryCode,
+                      t.AuthorizationCode,
+                      t.ResponseCode,
+                      t.TerminalID,
+                      t.CardEntryMode,
+                      t.CardPresentIndicator,
+                      t.CVVVerificationResult,
+                      t.AVSResponseCode,
+                      t.CustomerIPAddress,
+                      t.DeviceFingerprint,
+                      t.ProcessingChannel,
+                      t.SettlementDate,
+                      t.InterchangeFee,
+                      t.NetworkID,
+                      c.CustomerID,
+                      c.CustomerSegment,
+                      c.AccountOpenDate,
+                      c.CreditLimit,
+                      c.CurrentBalance,
+                      c.AvailableCredit,
+                      c.RiskRating,
+                      c.LastActivityDate
+                  FROM dbo.RawTransactions t
+                  INNER JOIN dbo.CustomerAccounts c ON t.CardNumber = c.CardNumber
+                  WHERE t.ProcessedFlag = 0
+                    AND t.TransactionDateTime &gt;= DATEADD(DAY, -1, GETDATE())
+                  ORDER BY t.TransactionDateTime
+                </property>
+                <property name="AccessMode">2</property>
+                <property name="SqlCommandVariable"/>
+                <property name="DefaultCodePage">1252</property>
+                <property name="AlwaysUseDefaultCodePage">false</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Connections[OleDbConnection]"
+                  connectionManagerID="{C3D4E5F6-A7B8-9012-CDEF-345678901234}"
+                  connectionManagerRefId="Package.ConnectionManagers[SRC_CreditCardStaging]"
+                  name="OleDbConnection"/>
+              </connections>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output]"
+                  name="OLE DB Source Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionID]" dataType="wstr" length="50" name="TransactionID"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CardNumber]" dataType="wstr" length="16" name="CardNumber"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CardHolderName]" dataType="wstr" length="100" name="CardHolderName"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionAmount]" dataType="cy" name="TransactionAmount"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CurrencyCode]" dataType="wstr" length="3" name="CurrencyCode"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionDateTime]" dataType="dbTimeStamp" name="TransactionDateTime"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[MerchantID]" dataType="wstr" length="20" name="MerchantID"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[MerchantName]" dataType="wstr" length="200" name="MerchantName"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[MerchantCategoryCode]" dataType="wstr" length="4" name="MerchantCategoryCode"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[MerchantCountryCode]" dataType="wstr" length="3" name="MerchantCountryCode"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[AuthorizationCode]" dataType="wstr" length="10" name="AuthorizationCode"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[ResponseCode]" dataType="wstr" length="4" name="ResponseCode"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="i4" name="CustomerID"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CustomerSegment]" dataType="wstr" length="20" name="CustomerSegment"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CreditLimit]" dataType="cy" name="CreditLimit"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[RiskRating]" dataType="wstr" length="10" name="RiskRating"/>
+                  </outputColumns>
+                </output>
+                <output refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Error Output]"
+                  isErrorOut="true"
+                  name="OLE DB Source Error Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Error Output].Columns[ErrorCode]" dataType="i4" name="ErrorCode" specialFlags="1"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]" dataType="i4" name="ErrorColumn" specialFlags="2"/>
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            
+            <!-- Derived Column: Add Calculated Fields -->
+            <component refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields"
+              componentClassID="Microsoft.DerivedColumn"
+              contactInfo="Derived Column;Microsoft Corporation; Microsoft SQL Server; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Add calculated columns for validation and processing"
+              name="DER_AddCalculatedFields"
+              usesDispositions="true">
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Inputs[Derived Column Input]"
+                  name="Derived Column Input">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Inputs[Derived Column Input].Columns[CardNumber]"
+                      cachedDataType="wstr" cachedLength="16" cachedName="CardNumber"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[CardNumber]"/>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Inputs[Derived Column Input].Columns[TransactionAmount]"
+                      cachedDataType="cy" cachedName="TransactionAmount"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionAmount]"/>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Inputs[Derived Column Input].Columns[MerchantCountryCode]"
+                      cachedDataType="wstr" cachedLength="3" cachedName="MerchantCountryCode"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[MerchantCountryCode]"/>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Inputs[Derived Column Input].Columns[TransactionDateTime]"
+                      cachedDataType="dbTimeStamp" cachedName="TransactionDateTime"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionDateTime]"/>
+                  </inputColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output]"
+                  name="Derived Column Output">
+                  <outputColumns>
+                    <!-- PCI-DSS Compliant Masked Card Number -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[MaskedCardNumber]"
+                      dataType="wstr" length="16" name="MaskedCardNumber"
+                      expression="LEFT(CardNumber,4) + &quot;********&quot; + RIGHT(CardNumber,4)"/>
+                    
+                    <!-- High Value Transaction Flag -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[IsHighValueTransaction]"
+                      dataType="bool" name="IsHighValueTransaction"
+                      expression="TransactionAmount &gt;= 10000 ? TRUE : FALSE"/>
+                    
+                    <!-- International Transaction Flag -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[IsInternational]"
+                      dataType="bool" name="IsInternational"
+                      expression="MerchantCountryCode != &quot;USA&quot; ? TRUE : FALSE"/>
+                    
+                    <!-- Processing Timestamp -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[ETLProcessingTimestamp]"
+                      dataType="dbTimeStamp" name="ETLProcessingTimestamp"
+                      expression="GETDATE()"/>
+                    
+                    <!-- Transaction Date Key for DW -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[TransactionDateKey]"
+                      dataType="i4" name="TransactionDateKey"
+                      expression="(DT_I4)(YEAR(TransactionDateTime) * 10000 + MONTH(TransactionDateTime) * 100 + DAY(TransactionDateTime))"/>
+                    
+                    <!-- Transaction Hour for Analysis -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[TransactionHour]"
+                      dataType="i4" name="TransactionHour"
+                      expression="DATEPART(&quot;Hour&quot;, TransactionDateTime)"/>
+                    
+                    <!-- Card BIN (First 6 digits) -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[CardBIN]"
+                      dataType="wstr" length="6" name="CardBIN"
+                      expression="LEFT(CardNumber,6)"/>
+                    
+                    <!-- Package Execution ID -->
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[PackageExecutionID]"
+                      dataType="i4" name="PackageExecutionID"
+                      expression="@[User::PackageExecutionID]"/>
+                  </outputColumns>
+                </output>
+                <output refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Error Output]"
+                  isErrorOut="true"
+                  name="Derived Column Error Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Error Output].Columns[ErrorCode]" dataType="i4" name="ErrorCode" specialFlags="1"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Error Output].Columns[ErrorColumn]" dataType="i4" name="ErrorColumn" specialFlags="2"/>
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            
+            <!-- Data Conversion for Target Compatibility -->
+            <component refId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion"
+              componentClassID="Microsoft.DataConvert"
+              contactInfo="Data Conversion;Microsoft Corporation; Microsoft SQL Server; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Convert data types for target compatibility"
+              name="DCV_DataTypeConversion"
+              usesDispositions="true">
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion.Inputs[Data Conversion Input]"
+                  name="Data Conversion Input"/>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion.Outputs[Data Conversion Output]"
+                  name="Data Conversion Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion.Outputs[Data Conversion Output].Columns[TransactionAmountDecimal]"
+                      dataType="numeric" precision="18" scale="4" name="TransactionAmountDecimal"/>
+                  </outputColumns>
+                </output>
+                <output refId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion.Outputs[Data Conversion Error Output]"
+                  isErrorOut="true"
+                  name="Data Conversion Error Output"/>
+              </outputs>
+            </component>
+            
+            <!-- Conditional Split: Route by Transaction Type -->
+            <component refId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType"
+              componentClassID="Microsoft.ConditionalSplit"
+              contactInfo="Conditional Split;Microsoft Corporation; Microsoft SQL Server; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Route transactions based on business rules"
+              name="CSPL_RouteByTransactionType"
+              usesDispositions="true">
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType.Inputs[Conditional Split Input]"
+                  name="Conditional Split Input"/>
+              </inputs>
+              <outputs>
+                <!-- High Value Transactions - Route to Enhanced Due Diligence -->
+                <output refId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType.Outputs[HighValueTransactions]"
+                  name="HighValueTransactions"
+                  exclusionGroup="1">
+                  <properties>
+                    <property name="Expression">IsHighValueTransaction == TRUE</property>
+                    <property name="FriendlyExpression">IsHighValueTransaction == TRUE</property>
+                    <property name="EvaluationOrder">1</property>
+                  </properties>
+                </output>
+                
+                <!-- International Transactions - Route to OFAC Screening -->
+                <output refId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType.Outputs[InternationalTransactions]"
+                  name="InternationalTransactions"
+                  exclusionGroup="1">
+                  <properties>
+                    <property name="Expression">IsInternational == TRUE &amp;&amp; IsHighValueTransaction == FALSE</property>
+                    <property name="FriendlyExpression">IsInternational == TRUE AND IsHighValueTransaction == FALSE</property>
+                    <property name="EvaluationOrder">2</property>
+                  </properties>
+                </output>
+                
+                <!-- Standard Transactions -->
+                <output refId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType.Outputs[StandardTransactions]"
+                  name="StandardTransactions"
+                  exclusionGroup="1">
+                  <properties>
+                    <property name="IsDefaultOut">true</property>
+                  </properties>
+                </output>
+                
+              </outputs>
+            </component>
+            
+            <!-- Lookup: Merchant Category Validation -->
+            <component refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation"
+              componentClassID="Microsoft.Lookup"
+              contactInfo="Lookup;Microsoft Corporation; Microsoft SQL Server; All Rights Reserved; http://www.microsoft.com/sql/support;4"
+              description="Validate merchant category codes against approved list"
+              name="LKP_MerchantCategoryValidation"
+              usesDispositions="true"
+              version="4">
+              <properties>
+                <property name="CacheType">0</property>
+                <property name="NoMatchBehavior">1</property>
+                <property name="NoMatchCachePercentage">0</property>
+                <property name="MaxMemoryUsage">25</property>
+                <property name="MaxMemoryUsage64">25</property>
+                <property name="ReferenceMetadataXml">&lt;referenceColumns&gt;&lt;referenceColumn name="MCC" dataType="DT_WSTR" length="4" codePage="0"/&gt;&lt;referenceColumn name="CategoryDescription" dataType="DT_WSTR" length="100" codePage="0"/&gt;&lt;referenceColumn name="RiskLevel" dataType="DT_WSTR" length="10" codePage="0"/&gt;&lt;referenceColumn name="IsRestricted" dataType="DT_BOOL" codePage="0"/&gt;&lt;/referenceColumns&gt;</property>
+                <property name="SqlCommand">SELECT MCC, CategoryDescription, RiskLevel, IsRestricted FROM dbo.MerchantCategoryCodes WHERE IsActive = 1</property>
+                <property name="SqlCommandParam"/>
+                <property name="ParameterMap"/>
+                <property name="DefaultCodePage">1252</property>
+                <property name="TreatDuplicateKeysAsError">true</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Connections[OleDbConnection]"
+                  connectionManagerID="{D4E5F6A7-B8C9-0123-DEFA-456789012345}"
+                  connectionManagerRefId="Package.ConnectionManagers[TGT_DataWarehouse]"
+                  name="OleDbConnection"/>
+              </connections>
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Inputs[Lookup Input]"
+                  name="Lookup Input">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Inputs[Lookup Input].Columns[MerchantCategoryCode]"
+                      cachedDataType="wstr" cachedLength="4" cachedName="MerchantCategoryCode"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[MerchantCategoryCode]">
+                      <properties>
+                        <property name="JoinToReferenceColumn">MCC</property>
+                      </properties>
+                    </inputColumn>
+                  </inputColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup Match Output]"
+                  name="Lookup Match Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup Match Output].Columns[CategoryDescription]"
+                      dataType="wstr" length="100" name="CategoryDescription">
+                      <properties>
+                        <property name="CopyFromReferenceColumn">CategoryDescription</property>
+                      </properties>
+                    </outputColumn>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup Match Output].Columns[MCCRiskLevel]"
+                      dataType="wstr" length="10" name="MCCRiskLevel">
+                      <properties>
+                        <property name="CopyFromReferenceColumn">RiskLevel</property>
+                      </properties>
+                    </outputColumn>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup Match Output].Columns[IsRestrictedMCC]"
+                      dataType="bool" name="IsRestrictedMCC">
+                      <properties>
+                        <property name="CopyFromReferenceColumn">IsRestricted</property>
+                      </properties>
+                    </outputColumn>
+                  </outputColumns>
+                </output>
+                <output refId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup No Match Output]"
+                  name="Lookup No Match Output"/>
+              </outputs>
+            </component>
+            
+            <!-- Multicast: Send to Multiple Destinations -->
+            <component refId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations"
+              componentClassID="Microsoft.Multicast"
+              contactInfo="Multicast;Microsoft Corporation; Microsoft SQL Server; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Send valid transactions to multiple destinations"
+              name="MCT_MultipleDestinations"
+              usesDispositions="true">
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Inputs[Multicast Input 1]"
+                  name="Multicast Input 1"/>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Outputs[ToDataWarehouse]"
+                  name="ToDataWarehouse"
+                  synchronousInputId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Inputs[Multicast Input 1]"/>
+                <output refId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Outputs[ToFraudAnalysis]"
+                  name="ToFraudAnalysis"
+                  synchronousInputId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Inputs[Multicast Input 1]"/>
+                <output refId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Outputs[ToArchive]"
+                  name="ToArchive"
+                  synchronousInputId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Inputs[Multicast Input 1]"/>
+              </outputs>
+            </component>
+            
+            <!-- Row Count: Track Processed Records -->
+            <component refId="Package\DFT_ExtractAndValidate\RC_CountProcessedRecords"
+              componentClassID="Microsoft.RowCount"
+              contactInfo="Row Count;Microsoft Corporation; Microsoft SQL Server; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Count total records processed"
+              name="RC_CountProcessedRecords">
+              <properties>
+                <property name="VariableName">User::TotalRecordsProcessed</property>
+              </properties>
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\RC_CountProcessedRecords.Inputs[Row Count Input 1]"
+                  name="Row Count Input 1"/>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\RC_CountProcessedRecords.Outputs[Row Count Output 1]"
+                  name="Row Count Output 1"
+                  synchronousInputId="Package\DFT_ExtractAndValidate\RC_CountProcessedRecords.Inputs[Row Count Input 1]"/>
+              </outputs>
+            </component>
+            
+            <!-- Destination: Data Warehouse Fact Table -->
+            <component refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions"
+              componentClassID="Microsoft.OLEDBDestination"
+              contactInfo="OLE DB Destination;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;4"
+              description="Load validated transactions to fact table"
+              name="OLE_DST_FactTransactions"
+              usesDispositions="true"
+              version="4">
+              <properties>
+                <property name="CommandTimeout">0</property>
+                <property name="OpenRowset">[dbo].[FactCreditCardTransactions]</property>
+                <property name="DefaultCodePage">1252</property>
+                <property name="FastLoadKeepIdentity">false</property>
+                <property name="FastLoadKeepNulls">false</property>
+                <property name="AccessMode">3</property>
+                <property name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS,ROWS_PER_BATCH=50000</property>
+                <property name="FastLoadMaxInsertCommitSize">2147483647</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Connections[OleDbConnection]"
+                  connectionManagerID="{D4E5F6A7-B8C9-0123-DEFA-456789012345}"
+                  connectionManagerRefId="Package.ConnectionManagers[TGT_DataWarehouse]"
+                  name="OleDbConnection"/>
+              </connections>
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input]"
+                  errorOrTruncationOperation="Insert"
+                  errorRowDisposition="FailComponent"
+                  hasSideEffects="true"
+                  name="OLE DB Destination Input">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].Columns[TransactionID]"
+                      externalMetadataColumnId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[TransactionID]"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionID]"/>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].Columns[MaskedCardNumber]"
+                      externalMetadataColumnId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[MaskedCardNumber]"
+                      lineageId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[MaskedCardNumber]"/>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].Columns[TransactionAmount]"
+                      externalMetadataColumnId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[TransactionAmount]"
+                      lineageId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output].Columns[TransactionAmount]"/>
+                    <inputColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].Columns[TransactionDateKey]"
+                      externalMetadataColumnId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[TransactionDateKey]"
+                      lineageId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output].Columns[TransactionDateKey]"/>
+                  </inputColumns>
+                  <externalMetadataColumns isUsed="True">
+                    <externalMetadataColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[TransactionID]" dataType="wstr" length="50" name="TransactionID"/>
+                    <externalMetadataColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[MaskedCardNumber]" dataType="wstr" length="16" name="MaskedCardNumber"/>
+                    <externalMetadataColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[TransactionAmount]" dataType="cy" name="TransactionAmount"/>
+                    <externalMetadataColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input].ExternalColumns[TransactionDateKey]" dataType="i4" name="TransactionDateKey"/>
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Outputs[OLE DB Destination Error Output]"
+                  isErrorOut="true"
+                  name="OLE DB Destination Error Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Outputs[OLE DB Destination Error Output].Columns[ErrorCode]" dataType="i4" name="ErrorCode" specialFlags="1"/>
+                    <outputColumn refId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Outputs[OLE DB Destination Error Output].Columns[ErrorColumn]" dataType="i4" name="ErrorColumn" specialFlags="2"/>
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            
+            <!-- Destination: Fraud Analysis Staging -->
+            <component refId="Package\DFT_ExtractAndValidate\OLE_DST_FraudAnalysisStaging"
+              componentClassID="Microsoft.OLEDBDestination"
+              contactInfo="OLE DB Destination;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;4"
+              description="Stage transactions for fraud analysis"
+              name="OLE_DST_FraudAnalysisStaging"
+              usesDispositions="true"
+              version="4">
+              <properties>
+                <property name="CommandTimeout">0</property>
+                <property name="OpenRowset">[dbo].[FraudAnalysisQueue]</property>
+                <property name="AccessMode">3</property>
+                <property name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT_ExtractAndValidate\OLE_DST_FraudAnalysisStaging.Connections[OleDbConnection]"
+                  connectionManagerID="{E5F6A7B8-C9D0-1234-EFAB-567890123456}"
+                  connectionManagerRefId="Package.ConnectionManagers[FRAUD_DetectionDB]"
+                  name="OleDbConnection"/>
+              </connections>
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\OLE_DST_FraudAnalysisStaging.Inputs[OLE DB Destination Input]"
+                  name="OLE DB Destination Input"/>
+              </inputs>
+            </component>
+            
+            <!-- Destination: Error Records to Quarantine -->
+            <component refId="Package\DFT_ExtractAndValidate\OLE_DST_QuarantineRecords"
+              componentClassID="Microsoft.OLEDBDestination"
+              contactInfo="OLE DB Destination;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;4"
+              description="Route failed/invalid records to quarantine"
+              name="OLE_DST_QuarantineRecords"
+              usesDispositions="true"
+              version="4">
+              <properties>
+                <property name="CommandTimeout">0</property>
+                <property name="OpenRowset">[dbo].[TransactionQuarantine]</property>
+                <property name="AccessMode">3</property>
+                <property name="FastLoadOptions">TABLOCK</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT_ExtractAndValidate\OLE_DST_QuarantineRecords.Connections[OleDbConnection]"
+                  connectionManagerID="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+                  connectionManagerRefId="Package.ConnectionManagers[LOG_ErrorDatabase]"
+                  name="OleDbConnection"/>
+              </connections>
+              <inputs>
+                <input refId="Package\DFT_ExtractAndValidate\OLE_DST_QuarantineRecords.Inputs[OLE DB Destination Input]"
+                  name="OLE DB Destination Input"/>
+              </inputs>
+            </component>
+            
+          </components>
+          
+          <!-- Data Flow Paths -->
+          <paths>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Source to Derived]"
+              name="Source to Derived"
+              startId="Package\DFT_ExtractAndValidate\OLE_SRC_RawTransactions.Outputs[OLE DB Source Output]"
+              endId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Inputs[Derived Column Input]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Derived to Conversion]"
+              name="Derived to Conversion"
+              startId="Package\DFT_ExtractAndValidate\DER_AddCalculatedFields.Outputs[Derived Column Output]"
+              endId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion.Inputs[Data Conversion Input]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Conversion to Split]"
+              name="Conversion to Split"
+              startId="Package\DFT_ExtractAndValidate\DCV_DataTypeConversion.Outputs[Data Conversion Output]"
+              endId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType.Inputs[Conditional Split Input]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Standard to Lookup]"
+              name="Standard to Lookup"
+              startId="Package\DFT_ExtractAndValidate\CSPL_RouteByTransactionType.Outputs[StandardTransactions]"
+              endId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Inputs[Lookup Input]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Lookup Match to Multicast]"
+              name="Lookup Match to Multicast"
+              startId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup Match Output]"
+              endId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Inputs[Multicast Input 1]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Multicast to RowCount]"
+              name="Multicast to RowCount"
+              startId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Outputs[ToDataWarehouse]"
+              endId="Package\DFT_ExtractAndValidate\RC_CountProcessedRecords.Inputs[Row Count Input 1]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[RowCount to DW]"
+              name="RowCount to DW"
+              startId="Package\DFT_ExtractAndValidate\RC_CountProcessedRecords.Outputs[Row Count Output 1]"
+              endId="Package\DFT_ExtractAndValidate\OLE_DST_FactTransactions.Inputs[OLE DB Destination Input]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Multicast to Fraud]"
+              name="Multicast to Fraud"
+              startId="Package\DFT_ExtractAndValidate\MCT_MultipleDestinations.Outputs[ToFraudAnalysis]"
+              endId="Package\DFT_ExtractAndValidate\OLE_DST_FraudAnalysisStaging.Inputs[OLE DB Destination Input]"/>
+            <path refId="Package\DFT_ExtractAndValidate.Paths[Lookup NoMatch to Quarantine]"
+              name="Lookup NoMatch to Quarantine"
+              startId="Package\DFT_ExtractAndValidate\LKP_MerchantCategoryValidation.Outputs[Lookup No Match Output]"
+              endId="Package\DFT_ExtractAndValidate\OLE_DST_QuarantineRecords.Inputs[OLE DB Destination Input]"/>
+          </paths>
+          
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- ========================================= -->
+    <!-- STAGE 3: FRAUD DETECTION PROCESSING      -->
+    <!-- ========================================= -->
+    <DTS:Executable
+      DTS:refId="Package\SEQ_FraudDetection"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Execute fraud detection algorithms"
+      DTS:DTSID="{SEQ33333-3333-3333-3333-333333333333}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="SEQ_FraudDetection">
+      
+      <DTS:Executables>
+        
+        <!-- Execute Fraud Scoring Stored Procedure -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_FraudDetection\SQL_ExecuteFraudScoring"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Execute ML-based fraud scoring"
+          DTS:DTSID="{SQL44444-4444-4444-4444-444444444444}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_ExecuteFraudScoring"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{E5F6A7B8-C9D0-1234-EFAB-567890123456}"
+              SQLTask:SqlStatementSource="
+                -- Execute fraud detection stored procedure
+                EXEC dbo.usp_ProcessFraudDetection
+                    @ProcessingDate = ?,
+                    @FraudScoreThreshold = ?,
+                    @PackageExecutionID = ?;
+                
+                -- Return count of flagged transactions
+                SELECT COUNT(*) AS FraudAlertCount
+                FROM dbo.FraudAlerts
+                WHERE DetectionDate = CAST(? AS DATE)
+                  AND PackageExecutionID = ?;"
+              SQLTask:ResultSetType="ResultSetType_SingleRow"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::FraudScoreThreshold"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="6"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="2"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="3"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="4"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ResultBinding
+                SQLTask:ResultName="FraudAlertCount"
+                SQLTask:DtsVariableName="User::FraudAlertCount"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Velocity Check - Multiple transactions in short window -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_FraudDetection\SQL_VelocityCheck"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Check for rapid-fire transactions indicating fraud"
+          DTS:DTSID="{SQL55555-5555-5555-5555-555555555555}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_VelocityCheck"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{E5F6A7B8-C9D0-1234-EFAB-567890123456}"
+              SQLTask:SqlStatementSource="
+                -- Detect cards with more than 5 transactions in 5 minutes
+                INSERT INTO dbo.FraudAlerts (
+                    TransactionID,
+                    AlertType,
+                    AlertReason,
+                    RiskScore,
+                    DetectionDate,
+                    PackageExecutionID
+                )
+                SELECT 
+                    t.TransactionID,
+                    'VELOCITY',
+                    'Multiple transactions within ' + CAST(? AS VARCHAR) + ' minute window',
+                    0.85,
+                    CAST(? AS DATE),
+                    ?
+                FROM dbo.FraudAnalysisQueue t
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM dbo.FraudAnalysisQueue t2
+                    WHERE t2.MaskedCardNumber = t.MaskedCardNumber
+                      AND t2.TransactionID != t.TransactionID
+                      AND ABS(DATEDIFF(MINUTE, t.TransactionDateTime, t2.TransactionDateTime)) &lt;= ?
+                    GROUP BY t2.MaskedCardNumber
+                    HAVING COUNT(*) &gt;= 5
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM dbo.FraudAlerts fa
+                    WHERE fa.TransactionID = t.TransactionID
+                );"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::DuplicateWindowMinutes"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="2"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="3"
+                SQLTask:DtsVariableName="User::DuplicateWindowMinutes"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Geographic Anomaly Detection -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_FraudDetection\SQL_GeoAnomalyCheck"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Detect impossible travel patterns"
+          DTS:DTSID="{SQL66666-6666-6666-6666-666666666666}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_GeoAnomalyCheck"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{E5F6A7B8-C9D0-1234-EFAB-567890123456}"
+              SQLTask:SqlStatementSource="
+                -- Detect impossible travel (transactions in different countries within 2 hours)
+                INSERT INTO dbo.FraudAlerts (
+                    TransactionID,
+                    AlertType,
+                    AlertReason,
+                    RiskScore,
+                    DetectionDate,
+                    PackageExecutionID
+                )
+                SELECT 
+                    t1.TransactionID,
+                    'GEO_ANOMALY',
+                    'Impossible travel: ' + t1.MerchantCountryCode + ' to ' + t2.MerchantCountryCode + ' in ' + 
+                    CAST(DATEDIFF(MINUTE, t1.TransactionDateTime, t2.TransactionDateTime) AS VARCHAR) + ' minutes',
+                    0.95,
+                    CAST(GETDATE() AS DATE),
+                    ?
+                FROM dbo.FraudAnalysisQueue t1
+                INNER JOIN dbo.FraudAnalysisQueue t2
+                    ON t1.MaskedCardNumber = t2.MaskedCardNumber
+                    AND t1.TransactionID &lt; t2.TransactionID
+                WHERE t1.MerchantCountryCode != t2.MerchantCountryCode
+                  AND ABS(DATEDIFF(MINUTE, t1.TransactionDateTime, t2.TransactionDateTime)) &lt;= 120
+                  AND NOT EXISTS (
+                      SELECT 1 FROM dbo.FraudAlerts fa
+                      WHERE fa.TransactionID = t1.TransactionID
+                        AND fa.AlertType = 'GEO_ANOMALY'
+                  );"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+      </DTS:Executables>
+      
+      <!-- Precedence Constraints within Fraud Detection -->
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_FraudDetection.PrecedenceConstraints[ScoreToVelocity]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC333333-3333-3333-3333-333333333333}"
+          DTS:From="Package\SEQ_FraudDetection\SQL_ExecuteFraudScoring"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="ScoreToVelocity"
+          DTS:To="Package\SEQ_FraudDetection\SQL_VelocityCheck"
+          DTS:Value="0"/>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_FraudDetection.PrecedenceConstraints[VelocityToGeo]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC444444-4444-4444-4444-444444444444}"
+          DTS:From="Package\SEQ_FraudDetection\SQL_VelocityCheck"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="VelocityToGeo"
+          DTS:To="Package\SEQ_FraudDetection\SQL_GeoAnomalyCheck"
+          DTS:Value="0"/>
+      </DTS:PrecedenceConstraints>
+      
+    </DTS:Executable>
+    
+    <!-- ========================================= -->
+    <!-- STAGE 4: COMPLIANCE PROCESSING           -->
+    <!-- ========================================= -->
+    <DTS:Executable
+      DTS:refId="Package\SEQ_ComplianceProcessing"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Execute compliance checks including OFAC and AML"
+      DTS:DTSID="{SEQ44444-4444-4444-4444-444444444444}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="SEQ_ComplianceProcessing">
+      
+      <DTS:Executables>
+        
+        <!-- OFAC Screening -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_ComplianceProcessing\SQL_OFACScreening"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Screen transactions against OFAC sanctioned entities"
+          DTS:DTSID="{SQL77777-7777-7777-7777-777777777777}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_OFACScreening"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{F6A7B8C9-D0E1-2345-FABC-678901234567}"
+              SQLTask:SqlStatementSource="
+                -- OFAC Sanctions List Screening
+                INSERT INTO dbo.ComplianceAlerts (
+                    TransactionID,
+                    AlertType,
+                    AlertCategory,
+                    RiskLevel,
+                    MatchedEntity,
+                    MatchScore,
+                    RequiresReview,
+                    CreatedDate,
+                    PackageExecutionID
+                )
+                SELECT 
+                    f.TransactionID,
+                    'OFAC_MATCH',
+                    'SANCTIONS',
+                    'HIGH',
+                    o.EntityName,
+                    CASE 
+                        WHEN f.MerchantName = o.EntityName THEN 1.0
+                        ELSE dbo.fn_FuzzyMatchScore(f.MerchantName, o.EntityName)
+                    END,
+                    1,
+                    GETDATE(),
+                    ?
+                FROM dbo.FactCreditCardTransactions f
+                CROSS APPLY (
+                    SELECT TOP 1 EntityName, EntityType
+                    FROM dbo.OFACSanctionsList o
+                    WHERE dbo.fn_FuzzyMatchScore(f.MerchantName, o.EntityName) &gt;= 0.85
+                       OR f.MerchantCountryCode IN (SELECT CountryCode FROM dbo.SanctionedCountries)
+                    ORDER BY dbo.fn_FuzzyMatchScore(f.MerchantName, o.EntityName) DESC
+                ) o
+                WHERE f.PackageExecutionID = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM dbo.ComplianceAlerts ca
+                      WHERE ca.TransactionID = f.TransactionID
+                        AND ca.AlertType = 'OFAC_MATCH'
+                  );"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- AML Transaction Monitoring -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_ComplianceProcessing\SQL_AMLMonitoring"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Anti-Money Laundering transaction pattern monitoring"
+          DTS:DTSID="{SQL88888-8888-8888-8888-888888888888}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_AMLMonitoring"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{F6A7B8C9-D0E1-2345-FABC-678901234567}"
+              SQLTask:SqlStatementSource="
+                -- AML Structuring Detection (Multiple transactions just under reporting threshold)
+                WITH TransactionPatterns AS (
+                    SELECT 
+                        CustomerID,
+                        MaskedCardNumber,
+                        COUNT(*) AS TxnCount,
+                        SUM(TransactionAmount) AS TotalAmount,
+                        AVG(TransactionAmount) AS AvgAmount,
+                        STDEV(TransactionAmount) AS StdevAmount
+                    FROM dbo.FactCreditCardTransactions
+                    WHERE TransactionDateTime &gt;= DATEADD(DAY, -7, GETDATE())
+                      AND TransactionAmount BETWEEN 9000 AND 9999
+                    GROUP BY CustomerID, MaskedCardNumber
+                    HAVING COUNT(*) &gt;= 3
+                )
+                INSERT INTO dbo.ComplianceAlerts (
+                    TransactionID,
+                    AlertType,
+                    AlertCategory,
+                    RiskLevel,
+                    MatchedEntity,
+                    AlertDetails,
+                    RequiresReview,
+                    CreatedDate,
+                    PackageExecutionID
+                )
+                SELECT DISTINCT
+                    f.TransactionID,
+                    'AML_STRUCTURING',
+                    'AML',
+                    'HIGH',
+                    f.CardHolderName,
+                    CONCAT(p.TxnCount, ' transactions averaging $', CAST(p.AvgAmount AS VARCHAR), ' in 7 days'),
+                    1,
+                    GETDATE(),
+                    ?
+                FROM dbo.FactCreditCardTransactions f
+                INNER JOIN TransactionPatterns p ON f.CustomerID = p.CustomerID
+                WHERE f.PackageExecutionID = ?
+                  AND f.TransactionAmount BETWEEN 9000 AND 9999;"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Get Compliance Violation Count -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_ComplianceProcessing\SQL_GetComplianceCount"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Get count of compliance violations"
+          DTS:DTSID="{SQL99999-9999-9999-9999-999999999999}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_GetComplianceCount"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{F6A7B8C9-D0E1-2345-FABC-678901234567}"
+              SQLTask:SqlStatementSource="
+                SELECT COUNT(*) AS ComplianceViolationCount
+                FROM dbo.ComplianceAlerts
+                WHERE PackageExecutionID = ?"
+              SQLTask:ResultSetType="ResultSetType_SingleRow"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ResultBinding
+                SQLTask:ResultName="ComplianceViolationCount"
+                SQLTask:DtsVariableName="User::ComplianceViolationCount"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+      </DTS:Executables>
+      
+      <!-- Precedence Constraints within Compliance -->
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_ComplianceProcessing.PrecedenceConstraints[OFACtoAML]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC555555-5555-5555-5555-555555555555}"
+          DTS:From="Package\SEQ_ComplianceProcessing\SQL_OFACScreening"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="OFACtoAML"
+          DTS:To="Package\SEQ_ComplianceProcessing\SQL_AMLMonitoring"
+          DTS:Value="0"/>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_ComplianceProcessing.PrecedenceConstraints[AMLtoCount]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC666666-6666-6666-6666-666666666666}"
+          DTS:From="Package\SEQ_ComplianceProcessing\SQL_AMLMonitoring"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="AMLtoCount"
+          DTS:To="Package\SEQ_ComplianceProcessing\SQL_GetComplianceCount"
+          DTS:Value="0"/>
+      </DTS:PrecedenceConstraints>
+      
+    </DTS:Executable>
+    
+    <!-- ========================================= -->
+    <!-- STAGE 5: FINALIZATION                    -->
+    <!-- ========================================= -->
+    <DTS:Executable
+      DTS:refId="Package\SEQ_Finalization"
+      DTS:CreationName="STOCK:SEQUENCE"
+      DTS:Description="Final cleanup and notification"
+      DTS:DTSID="{SEQ55555-5555-5555-5555-555555555555}"
+      DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="SEQ_Finalization">
+      
+      <DTS:Executables>
+        
+        <!-- Update Source Records as Processed -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_Finalization\SQL_MarkRecordsProcessed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Mark source records as processed"
+          DTS:DTSID="{SQLAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_MarkRecordsProcessed"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{C3D4E5F6-A7B8-9012-CDEF-345678901234}"
+              SQLTask:SqlStatementSource="
+                UPDATE dbo.RawTransactions
+                SET ProcessedFlag = 1,
+                    ProcessedDateTime = GETDATE(),
+                    ProcessedByPackageID = ?
+                WHERE ProcessedFlag = 0
+                  AND TransactionDateTime &gt;= DATEADD(DAY, -1, CAST(? AS DATE))
+                  AND TransactionDateTime &lt; CAST(? AS DATE)"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="2"
+                SQLTask:DtsVariableName="User::ProcessingDate"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="135"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Log Package Completion -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_Finalization\SQL_LogPackageCompletion"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Log successful package completion"
+          DTS:DTSID="{SQLBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_LogPackageCompletion"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+              SQLTask:SqlStatementSource="
+                UPDATE dbo.ETL_PackageExecution
+                SET ExecutionEndTime = GETDATE(),
+                    Status = 'Completed',
+                    RecordsProcessed = ?,
+                    RecordsFailed = ?,
+                    FraudAlertsGenerated = ?,
+                    ComplianceAlertsGenerated = ?,
+                    ExecutionDurationSeconds = DATEDIFF(SECOND, ExecutionStartTime, GETDATE())
+                WHERE ExecutionID = ?"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::TotalRecordsProcessed"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="User::TotalRecordsFailed"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="2"
+                SQLTask:DtsVariableName="User::FraudAlertCount"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="3"
+                SQLTask:DtsVariableName="User::ComplianceViolationCount"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="4"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Send Completion Notification -->
+        <DTS:Executable
+          DTS:refId="Package\SEQ_Finalization\SMTP_SendCompletionNotification"
+          DTS:CreationName="Microsoft.SendMailTask"
+          DTS:Description="Send completion email notification"
+          DTS:DTSID="{SMTPCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}"
+          DTS:ExecutableType="Microsoft.SendMailTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SMTP_SendCompletionNotification"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SendMailTask:SendMailTaskData
+              SendMailTask:SMTPServer="{B8C9D0E1-F2A3-4567-BCDE-890123456789}"
+              SendMailTask:From="etl-notifications@enterprise.bank"
+              SendMailTask:To="dataengineering@enterprise.bank"
+              SendMailTask:Subject="[SUCCESS] Credit Card Transaction Processing Complete"
+              SendMailTask:Priority="Normal"
+              xmlns:SendMailTask="www.microsoft.com/sqlserver/dts/tasks/sendmailtask">
+              <SendMailTask:MessageSource>Credit Card Transaction Processing completed successfully.
+
+Processing Date: [ProcessingDate]
+Records Processed: [TotalRecordsProcessed]
+Records Failed: [TotalRecordsFailed]
+Fraud Alerts Generated: [FraudAlertCount]
+Compliance Alerts Generated: [ComplianceViolationCount]
+
+Package Execution ID: [PackageExecutionID]
+
+This is an automated notification from the ETL system.</SendMailTask:MessageSource>
+            </SendMailTask:SendMailTaskData>
+          </DTS:ObjectData>
+          <DTS:PropertyExpression DTS:Name="Subject">"[SUCCESS] Credit Card Processing - " + (DT_STR, 10, 1252) @[User::ProcessingDate] + " - " + (DT_STR, 10, 1252) @[User::TotalRecordsProcessed] + " records"</DTS:PropertyExpression>
+        </DTS:Executable>
+        
+      </DTS:Executables>
+      
+      <!-- Precedence Constraints within Finalization -->
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_Finalization.PrecedenceConstraints[MarkToLog]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC777777-7777-7777-7777-777777777777}"
+          DTS:From="Package\SEQ_Finalization\SQL_MarkRecordsProcessed"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="MarkToLog"
+          DTS:To="Package\SEQ_Finalization\SQL_LogPackageCompletion"
+          DTS:Value="0"/>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package\SEQ_Finalization.PrecedenceConstraints[LogToEmail]"
+          DTS:CreationName=""
+          DTS:DTSID="{PC888888-8888-8888-8888-888888888888}"
+          DTS:From="Package\SEQ_Finalization\SQL_LogPackageCompletion"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="LogToEmail"
+          DTS:To="Package\SEQ_Finalization\SMTP_SendCompletionNotification"
+          DTS:Value="0"/>
+      </DTS:PrecedenceConstraints>
+      
+    </DTS:Executable>
+    
+  </DTS:Executables>
+  
+  <!-- ============================================================== -->
+  <!-- MAIN CONTROL FLOW PRECEDENCE CONSTRAINTS                       -->
+  <!-- ============================================================== -->
+  <DTS:PrecedenceConstraints>
+    
+    <!-- Initialization → Data Extraction -->
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[InitToExtract]"
+      DTS:CreationName=""
+      DTS:DTSID="{PCMAIN11-1111-1111-1111-111111111111}"
+      DTS:From="Package\SEQ_Initialization"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="InitToExtract"
+      DTS:To="Package\DFT_ExtractAndValidate"
+      DTS:Value="0"/>
+    
+    <!-- Data Extraction → Fraud Detection (Conditional: EnableFraudDetection) -->
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[ExtractToFraud]"
+      DTS:CreationName=""
+      DTS:DTSID="{PCMAIN22-2222-2222-2222-222222222222}"
+      DTS:EvalOp="3"
+      DTS:Expression="@[User::EnableFraudDetection] == TRUE"
+      DTS:From="Package\DFT_ExtractAndValidate"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="ExtractToFraud"
+      DTS:To="Package\SEQ_FraudDetection"
+      DTS:Value="0"/>
+    
+    <!-- Fraud Detection → Compliance (Conditional: EnableComplianceCheck) -->
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[FraudToCompliance]"
+      DTS:CreationName=""
+      DTS:DTSID="{PCMAIN33-3333-3333-3333-333333333333}"
+      DTS:EvalOp="3"
+      DTS:Expression="@[User::EnableComplianceCheck] == TRUE"
+      DTS:From="Package\SEQ_FraudDetection"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="FraudToCompliance"
+      DTS:To="Package\SEQ_ComplianceProcessing"
+      DTS:Value="0"/>
+    
+    <!-- Compliance → Finalization -->
+    <DTS:PrecedenceConstraint
+      DTS:refId="Package.PrecedenceConstraints[ComplianceToFinal]"
+      DTS:CreationName=""
+      DTS:DTSID="{PCMAIN44-4444-4444-4444-444444444444}"
+      DTS:From="Package\SEQ_ComplianceProcessing"
+      DTS:LogicalAnd="True"
+      DTS:ObjectName="ComplianceToFinal"
+      DTS:To="Package\SEQ_Finalization"
+      DTS:Value="0"/>
+    
+  </DTS:PrecedenceConstraints>
+  
+  <!-- ============================================================== -->
+  <!-- EVENT HANDLERS                                                 -->
+  <!-- ============================================================== -->
+  <DTS:EventHandlers>
+    
+    <!-- OnError Event Handler - Log Errors -->
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="{611E70BC-85CF-4C84-9EA7-C8EFE9C52A99}"
+      DTS:DTSID="{EH111111-1111-1111-1111-111111111111}"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnError">
+      
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\SQL_LogError"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Log error details to database"
+          DTS:DTSID="{SQLERR11-1111-1111-1111-111111111111}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_LogError"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+              SQLTask:SqlStatementSource="
+                INSERT INTO dbo.ETL_ErrorLog (
+                    PackageExecutionID,
+                    PackageName,
+                    TaskName,
+                    ErrorCode,
+                    ErrorDescription,
+                    ErrorDateTime,
+                    MachineName,
+                    UserName
+                )
+                VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    GETDATE(),
+                    ?,
+                    ?
+                )"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="System::PackageName"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="255"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="2"
+                SQLTask:DtsVariableName="System::SourceName"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="255"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="3"
+                SQLTask:DtsVariableName="System::ErrorCode"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="4"
+                SQLTask:DtsVariableName="System::ErrorDescription"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="4000"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="5"
+                SQLTask:DtsVariableName="System::MachineName"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="128"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="6"
+                SQLTask:DtsVariableName="System::UserName"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="128"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Update Package Status to Failed -->
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\SQL_UpdateStatusFailed"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Update package execution status to Failed"
+          DTS:DTSID="{SQLERR22-2222-2222-2222-222222222222}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_UpdateStatusFailed"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+              SQLTask:SqlStatementSource="
+                UPDATE dbo.ETL_PackageExecution
+                SET Status = 'Failed',
+                    ExecutionEndTime = GETDATE()
+                WHERE ExecutionID = ?"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+        
+        <!-- Send Error Notification Email -->
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\SMTP_SendErrorNotification"
+          DTS:CreationName="Microsoft.SendMailTask"
+          DTS:Description="Send error notification email"
+          DTS:DTSID="{SMTPERR1-1111-1111-1111-111111111111}"
+          DTS:ExecutableType="Microsoft.SendMailTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SMTP_SendErrorNotification"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SendMailTask:SendMailTaskData
+              SendMailTask:SMTPServer="{B8C9D0E1-F2A3-4567-BCDE-890123456789}"
+              SendMailTask:From="etl-alerts@enterprise.bank"
+              SendMailTask:To="dataengineering@enterprise.bank;oncall@enterprise.bank"
+              SendMailTask:Subject="[CRITICAL] Credit Card Processing FAILED"
+              SendMailTask:Priority="High"
+              xmlns:SendMailTask="www.microsoft.com/sqlserver/dts/tasks/sendmailtask"/>
+          </DTS:ObjectData>
+          <DTS:PropertyExpression DTS:Name="Subject">"[CRITICAL] CC Processing Failed - " + @[System::SourceName] + " - Error: " + (DT_STR, 10, 1252) @[System::ErrorCode]</DTS:PropertyExpression>
+          <DTS:PropertyExpression DTS:Name="MessageSource">"CRITICAL ERROR in Credit Card Transaction Processing\n\n" + 
+"Package: " + @[System::PackageName] + "\n" +
+"Failed Task: " + @[System::SourceName] + "\n" +
+"Error Code: " + (DT_STR, 10, 1252) @[System::ErrorCode] + "\n" +
+"Error Description: " + @[System::ErrorDescription] + "\n\n" +
+"Machine: " + @[System::MachineName] + "\n" +
+"Execution ID: " + (DT_STR, 10, 1252) @[User::PackageExecutionID] + "\n\n" +
+"Please investigate immediately."</DTS:PropertyExpression>
+        </DTS:Executable>
+        
+      </DTS:Executables>
+      
+      <DTS:PrecedenceConstraints>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[LogToStatus]"
+          DTS:CreationName=""
+          DTS:DTSID="{PCERR111-1111-1111-1111-111111111111}"
+          DTS:From="Package.EventHandlers[OnError]\SQL_LogError"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="LogToStatus"
+          DTS:To="Package.EventHandlers[OnError]\SQL_UpdateStatusFailed"
+          DTS:Value="0"/>
+        <DTS:PrecedenceConstraint
+          DTS:refId="Package.EventHandlers[OnError].PrecedenceConstraints[StatusToEmail]"
+          DTS:CreationName=""
+          DTS:DTSID="{PCERR222-2222-2222-2222-222222222222}"
+          DTS:From="Package.EventHandlers[OnError]\SQL_UpdateStatusFailed"
+          DTS:LogicalAnd="True"
+          DTS:ObjectName="StatusToEmail"
+          DTS:To="Package.EventHandlers[OnError]\SMTP_SendErrorNotification"
+          DTS:Value="0"/>
+      </DTS:PrecedenceConstraints>
+      
+    </DTS:EventHandler>
+    
+    <!-- OnWarning Event Handler -->
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnWarning]"
+      DTS:CreationName="{611E70BC-85CF-4C84-9EA7-C8EFE9C52A99}"
+      DTS:DTSID="{EH222222-2222-2222-2222-222222222222}"
+      DTS:EventName="OnWarning"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="OnWarning">
+      
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnWarning]\SQL_LogWarning"
+          DTS:CreationName="Microsoft.ExecuteSQLTask"
+          DTS:Description="Log warning to database"
+          DTS:DTSID="{SQLWRN11-1111-1111-1111-111111111111}"
+          DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="SQL_LogWarning"
+          DTS:ThreadHint="0">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData
+              SQLTask:Connection="{A7B8C9D0-E1F2-3456-ABCD-789012345678}"
+              SQLTask:SqlStatementSource="
+                INSERT INTO dbo.ETL_WarningLog (
+                    PackageExecutionID,
+                    PackageName,
+                    TaskName,
+                    WarningCode,
+                    WarningDescription,
+                    WarningDateTime
+                )
+                VALUES (?, ?, ?, ?, ?, GETDATE())"
+              xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask">
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="0"
+                SQLTask:DtsVariableName="User::PackageExecutionID"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="1"
+                SQLTask:DtsVariableName="System::PackageName"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="255"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="2"
+                SQLTask:DtsVariableName="System::SourceName"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="255"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="3"
+                SQLTask:DtsVariableName="System::ErrorCode"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="3"/>
+              <SQLTask:ParameterBinding
+                SQLTask:ParameterName="4"
+                SQLTask:DtsVariableName="System::ErrorDescription"
+                SQLTask:ParameterDirection="Input"
+                SQLTask:DataType="129"
+                SQLTask:ParameterSize="4000"/>
+            </SQLTask:SqlTaskData>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+      
+    </DTS:EventHandler>
+    
+  </DTS:EventHandlers>
+  
+  <!-- ============================================================== -->
+  <!-- LOGGING CONFIGURATION                                          -->
+  <!-- ============================================================== -->
+  <DTS:LogProviders>
+    <DTS:LogProvider
+      DTS:ConfigString="LOG_ErrorDatabase"
+      DTS:CreationName="DTS.LogProviderSQLServer.3"
+      DTS:Description="SSIS log provider for SQL Server"
+      DTS:DTSID="{LOGPROV1-1111-1111-1111-111111111111}"
+      DTS:ObjectName="SSIS log provider for SQL Server">
+      <DTS:ObjectData>
+        <InnerObject/>
+      </DTS:ObjectData>
+    </DTS:LogProvider>
+  </DTS:LogProviders>
+  
+  <DTS:LoggingOptions>
+    <DTS:LoggingMode>Enabled</DTS:LoggingMode>
+    <DTS:FilterKind>ByInclusion</DTS:FilterKind>
+    <DTS:EventFilter>
+      <DTS:EventToLog>OnError</DTS:EventToLog>
+      <DTS:EventToLog>OnWarning</DTS:EventToLog>
+      <DTS:EventToLog>OnInformation</DTS:EventToLog>
+      <DTS:EventToLog>OnPreExecute</DTS:EventToLog>
+      <DTS:EventToLog>OnPostExecute</DTS:EventToLog>
+      <DTS:EventToLog>OnProgress</DTS:EventToLog>
+      <DTS:EventToLog>OnTaskFailed</DTS:EventToLog>
+    </DTS:EventFilter>
+  </DTS:LoggingOptions>
+  
+</DTS:Executable>
